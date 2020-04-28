@@ -41,10 +41,12 @@ mapSub(List, []) when  is_list(List) -> List;
 mapSub(_, _) -> lenError.
 
 %%subs a number with arg.
-elemSub(X, Arg) -> X-Arg.
+elemSub(X, Arg) when is_number(X) ->X-Arg;
+elemSub(X, Arg) -> error.
 
 %%subs the separated elements from two lists
-listsSub([Head1,Head2|_]) -> Head1-Head2.
+listsSub([Head1,Head2|_]) when is_number(Head1),is_number(Head2) ->Head1-Head2;
+listsSub(_) -> error.
 
 %%Moves two lists into one list with lists of separated elements
 mergeLists([Head|Tail], [HeadArg|TailArg]) -> [[Head,HeadArg]|mergeLists(Tail, TailArg)];
