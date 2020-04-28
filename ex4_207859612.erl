@@ -37,6 +37,7 @@ replaceElem(X, _, _) -> X.
 %% use macro to subtract it.
 mapSub(List, Arg) when is_list(List), is_number(Arg) -> lists:map(fun(X) -> elemSub(X, Arg) end, List);
 mapSub(List, Arg) when  is_list(List), is_list(Arg), length(List)=:=length(Arg)-> lists:map(fun(X) -> listsSub(X) end, mergeLists(List, Arg));
+mapSub(List, []) when  is_list(List) -> List;
 mapSub(_, _) -> lenError.
 
 %%subs a number with arg.
