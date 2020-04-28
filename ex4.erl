@@ -32,6 +32,16 @@ replaceElem(X, Old, New) when Old == X -> New;
 replaceElem(X, _, _) -> X.
 
 %% use macro to subtract it.
-mapSub(List, Arg) when is_number(Arg) ->lists:map(fun(X) -> X-Arg end, List);
+mapSub(List, Arg) when is_number(Arg) -> lists:map(fun(X) -> elemSub(X, Arg) end, List);
+mapSub(List, Arg) when  is_list(Arg), length(List)=:=length(Arg)-> lists:map(fun(X) -> listsSub(X) end, mergeLists(List, Arg));
 mapSub(_, _) -> lenError.
 
+%%subs a number with arg.
+elemSub(X, Arg) -> X-Arg.
+
+%%subs the separated elements from two lists
+listsSub([Head1,Head2|_]) -> Head1-Head2.
+
+%%Moves two lists into one list with lists of separated elements
+mergeLists([Head|Tail], [HeadArg|TailArg]) -> [[Head,HeadArg]|mergeLists(Tail, TailArg)];
+mergeLists([], []) -> [].
