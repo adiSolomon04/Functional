@@ -42,7 +42,7 @@ mapSub(_, _) -> lenError.
 
 %%subs a number with arg.
 elemSub(X, Arg) when is_number(X) ->X-Arg;
-elemSub(X, Arg) -> error.
+elemSub(_, _) -> error.
 
 %%subs the separated elements from two lists
 listsSub([Head1,Head2|_]) when is_number(Head1),is_number(Head2) ->Head1-Head2;
