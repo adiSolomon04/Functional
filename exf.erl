@@ -6,172 +6,148 @@
 
 %% Record - node
 %% functions to create, get and update nodes
--record(node, {name, value = 'nil', right = 'nil', left = 'nil', numNodes = 1, numLeafs = 1, height = 0}).
+-record(node, {name, value = nil, right = nil, left = nil, numNodes = 1, numLeafs = 1, height = 0}).
 
 %% Create new node
-newNode(Name) -> #node{name = Name}.
-newNode(Name,Value) -> #node{name = Name, value = Value}.
+new_node(Name) -> #node{name = Name}.
 
-%% Getters
-getName(Record) -> #node{name = Name} = Record, Name.
-getChildren(Record) -> #node{right = Right, left = Left} = Record, {Right, Left}.
-getData(Record) -> #node{numNodes = NumNodes, numLeafs = NumLeaves, height = Height} = Record,
-  {NumNodes, NumLeaves, Height}.
+get_name(Record) -> Record#node.name.
+get_children(Record) -> {Record#node.right, Record#node.left}.
+get_data(Record) -> {Record#node.numNodes, Record#node.numLeafs, Record#node.height}.
 
-getRight(Record) -> #node{right = Right} = Record, Right.
-getLeft(Record) -> #node{left = Left} = Record, Left.
-
+get_right(Record) -> Record#node.right.
+get_left(Record) -> Record#node.left.
 
 %% Setter
-updateNode(Record, Right, Left, NumNodes, NumLeaves, Height) ->
+update_node(Record, Right, Left, NumNodes, NumLeaves, Height) ->
   Record#node{left = Left, right = Right, numNodes = NumNodes, numLeafs = NumLeaves, height = Height}.
-
-%%todo delete if not needed.
-%setChildren(Record, {Right, Left}) -> Record#node{right = Right, left = Left}.
-
-%setData(Record,{NumNodes, NumLeaves, Height}) -> Record#node{numNodes = NumNodes, numLeafs = NumLeaves, height = Height}.
-
-%setLeft(Record, Left) -> Record#node{left = Left}.
-%setRight(Record, Right) -> Record#node{right = Right}.
-%updateNode(Record, Right, Left) -> Record#node{left = Left, right = Right}.
 
 %%-----------------------------------exp_to_bdd----------------------------------
 exp_to_bdd(BoolFunc, Ordering) ->
-  Map = buildMapOfVars(BoolFunc),
+  Map = get_vars(BoolFunc, #{}),
   ListVars = maps:keys(Map),
-  ListTrees = lists:map(fun(X) -> bddTree(Map, X, BoolFunc) end, perms(ListVars)),
-  ListNeededData = neededData(ListTrees, Ordering),
+  ListTrees = lists:map(fun(X) -> bdd_tree(maps:merge(Map,#{one => new_node(one), zero => new_node(zero)}) , X, BoolFunc) end, perms(ListVars)),
+  ListNeededData = needed_data(ListTrees, Ordering),
   MinData = lists:min(ListNeededData),
-  findMostEfficient(ListTrees, ListNeededData, MinData).
+  find_most_efficient(ListTrees, ListNeededData, MinData).
 
 
 %% Find the tree with the most efficient Ordering.
-findMostEfficient([Tree|_], [Data|_], MinData) when Data==MinData -> Tree;
-findMostEfficient([_|ListTrees], [_|ListNeededData], MinData) ->
-  findMostEfficient(ListTrees, ListNeededData, MinData).
+find_most_efficient([Tree|_], [Data|_], MinData) when Data==MinData -> Tree;
+find_most_efficient([_|ListTrees], [_|ListNeededData], MinData) ->
+  find_most_efficient(ListTrees, ListNeededData, MinData).
 
 %% Get the ordering Needed Data
-neededData(ListTrees, Ordering) -> case Ordering of
+needed_data(ListTrees, Ordering) -> case Ordering of
                                      num_of_nodes -> lists:map(fun(X) -> #node{numNodes = Data} = X, Data end, ListTrees);
                                      num_of_leafs -> lists:map(fun(X) -> #node{numLeafs = Data} = X, Data end, ListTrees);
-                                     tree_height -> lists:map(fun(X) -> #node{height = Data} = X, Data end, ListTrees)
-                                   end;
-neededData(_, _) -> errorInOrderingInput.
+                                     tree_height -> lists:map(fun(X) -> #node{height = Data} = X, Data end, ListTrees);
+                                      _ -> errorInOrderingInput
+                                   end.
 
 %% Input all variables to the Map,
 %% Has two unique variables - 1, 0.
-buildMapOfVars(BoolFunc) -> Map = #{'one' => newNode('one', 1), 'zero' => newNode('one', 0)}, getVars(BoolFunc, Map).
+build_map_vars(BoolFunc) -> Map = #{one => new_node(one), zero => new_node(zero)}, get_vars(BoolFunc, Map).
 
 % Every found atom is entered to the Map
-getVars({'not', Arg}, Map) -> if is_tuple(Arg) -> getVars(Arg, Map);
-                               is_atom(Arg) -> Map#{Arg=>0};
+get_vars({'not', Arg}, Map) -> if is_tuple(Arg) -> get_vars(Arg, Map);
+                               is_atom(Arg) -> Map#{Arg=>false};
                                true -> errorInFunctionBuild_not
                              end;
-getVars({Arg, {Arg1, Arg2}}, Map) when (Arg=='or' or Arg=='and') ->
-                                      if is_tuple(Arg1), is_tuple(Arg2) -> maps:merge(getVars(Arg1, Map),getVars(Arg2, Map));
-                                        is_atom(Arg1), is_tuple(Arg2)  -> maps:put(Arg1, 0, getVars(Arg2, Map));%%getVars(Arg2, Map)#{Arg1 => 0};
-                                        is_atom(Arg2), is_tuple(Arg1)  -> maps:put(Arg2, 0, getVars(Arg1, Map));
-                                        is_atom(Arg1), is_atom(Arg2) -> Map#{Arg1=>0, Arg2=>0};
+get_vars({'or', {Arg1, Arg2}}, Map) -> if is_tuple(Arg1), is_tuple(Arg2) -> maps:merge(get_vars(Arg1, Map), get_vars(Arg2, Map));
+                                        is_atom(Arg1), is_tuple(Arg2)  -> maps:put(Arg1, false, get_vars(Arg2, Map));%%getVars(Arg2, Map)#{Arg1 => 0};
+                                        is_atom(Arg2), is_tuple(Arg1)  -> maps:put(Arg2, false, get_vars(Arg1, Map));
+                                        is_atom(Arg1), is_atom(Arg2) -> Map#{Arg1=>false, Arg2=>false};
                                         true -> errorInFunctionBuild_or
                                       end;
 
-%getVars({'and', {Arg1, Arg2}}, Map) -> if is_tuple(Arg1), is_tuple(Arg2) -> maps:merge(getVars(Arg1, Map),getVars(Arg2, Map));
- %                                        is_atom(Arg1), is_tuple(Arg2)  -> getVars(Arg2, Map)#{Arg1 => 0};
-  %                                       is_atom(Arg2), is_tuple(Arg1)  -> getVars(Arg1, Map)#{Arg2 => 0};
-   %                                      is_atom(Arg1), is_atom(Arg2) -> Map#{Arg1=>0, Arg2=>0};
-    %                                     true -> errorInFunctionBuild_or
-     %                                  end;
+get_vars({'and', {Arg1, Arg2}}, Map) -> if is_tuple(Arg1), is_tuple(Arg2) -> maps:merge(get_vars(Arg1, Map), get_vars(Arg2, Map));
+                                         is_atom(Arg1), is_tuple(Arg2)  -> maps:put(Arg1, false, get_vars(Arg2, Map));
+                                         is_atom(Arg2), is_tuple(Arg1)  -> maps:put(Arg2, false, get_vars(Arg1, Map));
+                                         is_atom(Arg1), is_atom(Arg2) -> Map#{Arg1=>false, Arg2=>false};
+                                         true -> errorInFunctionBuild_or
+                                       end;
 
-getVars(_, _) -> errorInBoolFunction_Tuple.
+get_vars(_, _) -> errorInBoolFunction_Tuple.
 
 %% Calculates the boolean function.
 %% uses The tuple values in the map.
-boolFuncCalc({'not', Arg}, M) -> if is_tuple(Arg) -> fun_not(boolFuncCalc(Arg, M));
-                                is_atom(Arg) -> fun_not(maps:get(Arg, M));
-                                true -> errorInFunctionBuild_not
-                              end;
-boolFuncCalc({'or', {Arg1, Arg2}}, M) -> if is_tuple(Arg1), is_tuple(Arg2) -> fun_or(boolFuncCalc(Arg1, M), boolFuncCalc(Arg2, M));
-                                        is_atom(Arg1), is_tuple(Arg2)  -> fun_or(maps:get(Arg1, M), boolFuncCalc(Arg2, M));
-                                        is_atom(Arg2), is_tuple(Arg1)  -> fun_or(maps:get(Arg2, M), boolFuncCalc(Arg1, M));
-                                        is_atom(Arg1), is_atom(Arg2) -> fun_or(maps:get(Arg1, M), maps:get(Arg1, M));
-                                        true -> errorInFunctionBuild_or
-                                      end;
-
-boolFuncCalc({'and', {Arg1, Arg2}}, M) -> if is_tuple(Arg1), is_tuple(Arg2) -> fun_and(boolFuncCalc(Arg1, M), boolFuncCalc(Arg2, M));
-                                        is_atom(Arg1), is_tuple(Arg2)  -> fun_and(maps:get(Arg1, M), boolFuncCalc(Arg2, M));
-                                        is_atom(Arg2), is_tuple(Arg1)  -> fun_and(maps:get(Arg2, M), boolFuncCalc(Arg1, M));
-                                        is_atom(Arg1), is_atom(Arg2) -> fun_and(maps:get(Arg1, M), maps:get(Arg1, M));
-                                        true -> errorInFunctionBuild_and
-                                      end;
-boolFuncCalc(_, _) -> errorInFunctionBuild_Tuple.
-
-%% Boolean functions
-fun_not(Arg) ->
-  if Arg==1 -> 0;
-     Arg==0 -> 1;
-     true -> error
-  end.
-
-fun_or(Arg1, Arg2) ->
-  if Arg1==1;Arg2==1 ->1;
-     Arg1==0,Arg2==0 ->0;
-    true -> error
-  end.
-
-fun_and(Arg1, Arg2) ->
-  if Arg1==1,Arg2==1 ->1;
-     Arg1==0;Arg2==0 ->0;
-     true -> error
-  end.
+bool_func_calc({'not', Arg}, M) ->
+  if is_tuple(Arg) -> not bool_func_calc(Arg, M);
+    is_atom(Arg) -> not maps:get(Arg, M);
+    true -> errorInFunctionBuild_not
+  end;
+bool_func_calc({'or', {Arg1, Arg2}}, M) ->
+  (if is_tuple(Arg1) -> bool_func_calc(Arg1, M);
+     is_atom(Arg1) -> maps:get(Arg1, M);
+     true -> error_bool_func_calc_tuple
+   end)
+    or
+    (if is_tuple(Arg2) -> bool_func_calc(Arg2, M);
+       is_atom(Arg2) -> maps:get(Arg2, M);
+       true -> error_bool_func_calc_tuple
+     end);
+bool_func_calc({'and', {Arg1, Arg2}}, M) ->
+  (if is_tuple(Arg1) -> bool_func_calc(Arg1, M);
+     is_atom(Arg1) -> maps:get(Arg1, M);
+     true -> error_bool_func_calc_tuple
+   end)
+    and
+    (if is_tuple(Arg2) -> bool_func_calc(Arg2, M);
+       is_atom(Arg2) -> maps:get(Arg2, M);
+       true -> error_bool_func_calc_tuple
+     end).
 
 %% first call to bddTree
-bddTree(Map, [Head|Perm], BoolFunction) -> bddTree(Map, Perm, newNode(Head), BoolFunction);
-bddTree(_, [], _) -> errorPermListEmpty.
+bdd_tree(Map, [Head|Perm], BoolFunction) -> bdd_tree(Map, Perm, new_node(Head), BoolFunction);
+bdd_tree(_, [], _) -> errorPermListEmpty.
 
 % second bddTree, recursive function
-bddTree(Map, [Head|Perm], Tree, BoolFunction) ->
+bdd_tree(Map, [Head|Perm], Tree, BoolFunction) ->
   %% The way Down of the tree
-  Right = bddTree(Map#{getName(Tree):=1}, Perm, newNode(Head), BoolFunction),
-  Left =  bddTree(Map#{getName(Tree):=0}, Perm, newNode(Head), BoolFunction),
+  Right = bdd_tree(Map#{get_name(Tree):=true}, Perm, new_node(Head), BoolFunction),
+  Left =  bdd_tree(Map#{get_name(Tree):=false}, Perm, new_node(Head), BoolFunction),
   %% On the way up from recursive call
-  IsEqual = isSubTEqual(Right, Left),
+  IsEqual = is_sub_equal(Right, Left),
   if IsEqual -> Right;
     true ->
-      {NumNodesR, NumLeavesR, HeightR} = getData(Right),
-      {NumNodesL, NumLeavesL, HeightL} = getData(Left),
-      updateNode(Tree, Right, Left,
+      {NumNodesR, NumLeavesR, HeightR} = get_data(Right),
+      {NumNodesL, NumLeavesL, HeightL} = get_data(Left),
+      update_node(Tree, Right, Left,
         NumNodesR+NumNodesL+1, NumLeavesR+NumLeavesL, max(HeightR, HeightL)+1)
   end;
 
-bddTree(Map, [], Tree, BoolFunction) ->
-  Right = getLeaf(Map, boolFuncCalc(BoolFunction, Map#{getName(Tree):=1})),
-    %newNode('leaf', calcFunc(Map#{getName(Tree):=1})), %%connect to one, zero nodes
-  Left =  getLeaf(Map, boolFuncCalc(BoolFunction, Map#{getName(Tree):=0})),
-    %newNode('leaf', calcFunc(Map#{getName(Tree):=0})),
-  IsEqual = isSubTEqual(Right, Left),
+bdd_tree(Map, [], Tree, BoolFunction) ->
+  Right = get_leaf(Map, bool_func_calc(BoolFunction, Map#{get_name(Tree):=true})),
+  Left =  get_leaf(Map, bool_func_calc(BoolFunction, Map#{get_name(Tree):=false})),
+  IsEqual = is_sub_equal(Right, Left),
   if IsEqual -> Right;
     true ->
-      {NumNodesR, NumLeavesR, HeightR} = getData(Right),
-      {NumNodesL, NumLeavesL, HeightL} = getData(Left),
-  updateNode(Tree, Right, Left,
+      {NumNodesR, NumLeavesR, HeightR} = get_data(Right),
+      {NumNodesL, NumLeavesL, HeightL} = get_data(Left),
+  update_node(Tree, Right, Left,
     NumNodesR+NumNodesL+1, NumLeavesR+NumLeavesL, max(HeightR, HeightL)+1)
   end.
 
 %% Checks Recursively if two sub trees are equal.
-isSubTEqual(SubT1, SubT2) when is_record(SubT1, node)and is_record(SubT2, node) ->
-  Name1 =getName(SubT1), Name2 = getName(SubT2)
-  , {Right1, Left1} = getChildren(SubT1), {Right2, Left2} = getChildren(SubT2),
+is_sub_equal(SubT1, SubT2) when is_record(SubT1, node), is_record(SubT2, node) ->
+  Name1 = get_name(SubT1), Name2 = get_name(SubT2)
+  , {Right1, Left1} = get_children(SubT1), {Right2, Left2} = get_children(SubT2),
   if Name1=/=Name2 -> false;
-     true-> isSubTEqual(Right1,Right2) and isSubTEqual(Left1,Left2)
+     true-> is_sub_equal(Right1,Right2) and is_sub_equal(Left1,Left2)
   end;
-isSubTEqual('nil', 'nil') -> true;
-isSubTEqual(_,_) -> false.
+is_sub_equal('nil', 'nil') -> true;
+is_sub_equal(_,_) -> false.
 
 %% Gets one of the initialized variable nodes - 1 or 0.
-getLeaf(Map, Calc) -> if Calc == 1 -> maps:get(one, Map);
-                        Calc == 0 -> maps:get(zero, Map);
-                        is_atom(Calc) -> Calc %%todo: on error??
-                      end.
+get_leaf(Map, Calc) ->
+  maps:get(
+    case Calc of
+       true -> one;
+       _ -> zero
+    end,
+    Map
+  ).
 
 %%Make all permutations of a list.
 perms([]) -> [[]];
@@ -179,11 +155,57 @@ perms(L)  -> [[H|T] || H <- L, T <- perms(L--[H])].
 
 %%-----------------------------------solve_bdd----------------------------------
 solve_bdd(BddTree, ListVars) ->
-  findRes(BddTree, maps:from_list(ListVars++[{one, 1}, {zero, 0}])).
+  find_res(BddTree, maps:from_list(
+    lists:map(fun({Arg,X}) -> case X of
+                                1 -> {Arg, true};
+                                0 ->{Arg, false};
+                                _ -> {Arg, X}
+                              end
+              end,
+      ListVars)++
+    [{one, true}, {zero, false}])).
 
-findRes(BddTree, Map) -> Val = maps:get(getName(BddTree)), Name = getName(BddTree),
-  if (Name=='one' or Name=='zero') -> maps:get(getName(BddTree));
-    (Val==1 or Val==true) -> findRes(getRight(BddTree), Map);
-    (Val==0 or Val==false) -> findRes(getLeft(BddTree), Map)
+find_res(BddTree, Map) when is_record(BddTree, node)-> %%Val = maps:get(get_name(BddTree)), Name = get_name(BddTree),
+  case get_name(BddTree) of
+    Name when Name == one orelse Name== zero -> maps:get(get_name(BddTree), Map);
+    _ ->
+      find_res(
+        case maps:get(get_name(BddTree), Map) of
+          Val when Val -> get_right(BddTree);
+          _ -> get_left(BddTree)
+        end,
+        Map
+      )
+  end;
+find_res(_, _) -> error.
+
+
+tree_only(Map, [Head|Perm], BoolFunction) -> tree_only(Map, Perm, new_node(Head), BoolFunction);
+tree_only(_, [], _) -> errorPermListEmpty.
+
+% second bddTree, recursive function
+tree_only(Map, [Head|Perm], Tree, BoolFunction) ->
+  %% The way Down of the tree
+  Right = tree_only(Map#{get_name(Tree):=true}, Perm, new_node(Head), BoolFunction),
+  Left =  tree_only(Map#{get_name(Tree):=false}, Perm, new_node(Head), BoolFunction),
+  %% On the way up from recursive call
+  if
+    true ->
+      {NumNodesR, NumLeavesR, HeightR} = get_data(Right),
+      {NumNodesL, NumLeavesL, HeightL} = get_data(Left),
+      update_node(Tree, Right, Left,
+        NumNodesR+NumNodesL+1, NumLeavesR+NumLeavesL, max(HeightR, HeightL)+1)
+  end;
+
+tree_only(Map, [], Tree, BoolFunction) ->
+  Right = get_leaf(Map, bool_func_calc(BoolFunction, Map#{get_name(Tree):=true})),
+  %newNode('leaf', calcFunc(Map#{getName(Tree):=1})), %%connect to one, zero nodes
+  Left =  get_leaf(Map, bool_func_calc(BoolFunction, Map#{get_name(Tree):=false})),
+  %newNode('leaf', calcFunc(Map#{getName(Tree):=0})),
+  if
+    true ->
+      {NumNodesR, NumLeavesR, HeightR} = get_data(Right),
+      {NumNodesL, NumLeavesL, HeightL} = get_data(Left),
+      update_node(Tree, {Right, Map#{get_name(Tree):=true}}, {Left, Map#{get_name(Tree):=false}},
+        NumNodesR+NumNodesL+1, NumLeavesR+NumLeavesL, max(HeightR, HeightL)+1)
   end.
-
