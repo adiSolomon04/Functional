@@ -2,11 +2,11 @@
 %%-author("Adi Solo").
 
 %% API
--export([exp_to_bdd/2, solve_bdd/2]).
+-export([exp_to_bdd/2, solve_bdd/2, booleanGenerator/2]).
 
 %% Record - node
 %% functions to create, get and update nodes
--record(node, {name, value = nil, right = nil, left = nil, numNodes = 1, numLeafs = 1, height = 0}).
+-record(node, {name, right = nil, left = nil, numNodes = 0, numLeafs = 0, height = 0}).
 
 %% Create new node
 new_node(Name) -> #node{name = Name}.
@@ -24,12 +24,19 @@ update_node(Record, Right, Left, NumNodes, NumLeaves, Height) ->
 
 %%-----------------------------------exp_to_bdd----------------------------------
 exp_to_bdd(BoolFunc, Ordering) ->
-  Map = get_vars(BoolFunc, #{}),
-  ListVars = maps:keys(Map),
-  ListTrees = lists:map(fun(X) -> bdd_tree(maps:merge(Map,#{one => new_node(one), zero => new_node(zero)}) , X, BoolFunc) end, perms(ListVars)),
+  TimeStart = erlang:timestamp(), %% Time catch
+  Map = get_vars(BoolFunc, #{}),  %% Build map of all variables
+  ListVars = maps:keys(Map),      %% Get map of keys so we can make permutation.
+  %% From all permutations - build trees.
+  %% AfterWards - find the most efficient and return it.
+  ListTrees = lists:map(fun(X) -> bdd_tree(maps:merge(Map,#{true => new_node(true), false => new_node(false)}) , X, BoolFunc) end, perms(ListVars)),
   ListNeededData = needed_data(ListTrees, Ordering),
   MinData = lists:min(ListNeededData),
-  find_most_efficient(ListTrees, ListNeededData, MinData).
+  Tree = find_most_efficient(ListTrees, ListNeededData, MinData),
+  io:format("total time taken ~f seconds~n", [timer:now_diff(erlang:timestamp(), TimeStart) / 1000000]),
+  Tree.
+
+
 
 
 %% Find the tree with the most efficient Ordering.
@@ -44,10 +51,6 @@ needed_data(ListTrees, Ordering) -> case Ordering of
                                      tree_height -> lists:map(fun(X) -> #node{height = Data} = X, Data end, ListTrees);
                                       _ -> errorInOrderingInput
                                    end.
-
-%% Input all variables to the Map,
-%% Has two unique variables - 1, 0.
-build_map_vars(BoolFunc) -> Map = #{one => new_node(one), zero => new_node(zero)}, get_vars(BoolFunc, Map).
 
 % Every found atom is entered to the Map
 get_vars({'not', Arg}, Map) -> if is_tuple(Arg) -> get_vars(Arg, Map);
@@ -113,20 +116,23 @@ bdd_tree(Map, [Head|Perm], Tree, BoolFunction) ->
     true ->
       {NumNodesR, NumLeavesR, HeightR} = get_data(Right),
       {NumNodesL, NumLeavesL, HeightL} = get_data(Left),
-      update_node(Tree, Right, Left,
+      if NumLeavesL+NumLeavesR == 0 -> %% means that both are leafs
+        update_node(Tree, Right, Left,
+          1, 1, 0);
+         true -> update_node(Tree, Right, Left,
         NumNodesR+NumNodesL+1, NumLeavesR+NumLeavesL, max(HeightR, HeightL)+1)
+      end
   end;
 
+%% Ended the tree build, starting to go back up
 bdd_tree(Map, [], Tree, BoolFunction) ->
-  Right = get_leaf(Map, bool_func_calc(BoolFunction, Map#{get_name(Tree):=true})),
-  Left =  get_leaf(Map, bool_func_calc(BoolFunction, Map#{get_name(Tree):=false})),
+  Right = maps:get(bool_func_calc(BoolFunction, Map#{get_name(Tree):=true}), Map),
+  Left =  maps:get(bool_func_calc(BoolFunction, Map#{get_name(Tree):=false}),Map),
   IsEqual = is_sub_equal(Right, Left),
   if IsEqual -> Right;
     true ->
-      {NumNodesR, NumLeavesR, HeightR} = get_data(Right),
-      {NumNodesL, NumLeavesL, HeightL} = get_data(Left),
   update_node(Tree, Right, Left,
-    NumNodesR+NumNodesL+1, NumLeavesR+NumLeavesL, max(HeightR, HeightL)+1)
+    1, 1, 0)
   end.
 
 %% Checks Recursively if two sub trees are equal.
@@ -139,38 +145,31 @@ is_sub_equal(SubT1, SubT2) when is_record(SubT1, node), is_record(SubT2, node) -
 is_sub_equal('nil', 'nil') -> true;
 is_sub_equal(_,_) -> false.
 
-%% Gets one of the initialized variable nodes - 1 or 0.
-get_leaf(Map, Calc) ->
-  maps:get(
-    case Calc of
-       true -> one;
-       _ -> zero
-    end,
-    Map
-  ).
-
 %%Make all permutations of a list.
 perms([]) -> [[]];
 perms(L)  -> [[H|T] || H <- L, T <- perms(L--[H])].
 
 %%-----------------------------------solve_bdd----------------------------------
 solve_bdd(BddTree, ListVars) ->
-  find_res(BddTree, maps:from_list(
+  TimeStart = erlang:timestamp(),         %% Time catch
+  Res = find_res(BddTree, maps:from_list( %%make a map of variables
     lists:map(fun({Arg,X}) -> case X of
                                 1 -> {Arg, true};
                                 0 ->{Arg, false};
                                 _ -> {Arg, X}
                               end
               end,
-      ListVars)++
-    [{one, true}, {zero, false}])).
+      ListVars)++                         %% Switch 0 and 1 in input List to boolean atoms
+    [{true, true}, {false, false}])),     %% add the leafs values to the map
+    io:format("total time taken ~f seconds~n", [timer:now_diff(erlang:timestamp(), TimeStart) / 1000000]),
+    Res.
 
-find_res(BddTree, Map) when is_record(BddTree, node)-> %%Val = maps:get(get_name(BddTree)), Name = get_name(BddTree),
+find_res(BddTree, Map) when is_record(BddTree, node)->
   case get_name(BddTree) of
-    Name when Name == one orelse Name== zero -> maps:get(get_name(BddTree), Map);
+    Name when Name == true orelse Name== false -> get_name(BddTree); %% If the record is a leaf - return the result
     _ ->
       find_res(
-        case maps:get(get_name(BddTree), Map) of
+        case maps:get(get_name(BddTree), Map) of                     %% Go to the Left or Right child accordingly to map variables.
           Val when Val -> get_right(BddTree);
           _ -> get_left(BddTree)
         end,
@@ -180,32 +179,25 @@ find_res(BddTree, Map) when is_record(BddTree, node)-> %%Val = maps:get(get_name
 find_res(_, _) -> error.
 
 
-tree_only(Map, [Head|Perm], BoolFunction) -> tree_only(Map, Perm, new_node(Head), BoolFunction);
-tree_only(_, [], _) -> errorPermListEmpty.
+%%-----------------------------------booleanGenerator----------------------------------
+booleanGenerator(NumOfVars, NumOfEquations) ->
+  lists:map(fun(_) -> boolean_gen(NumOfVars, NumOfVars) end,  %% Run the function on every place in the list
+    lists:seq(1, NumOfEquations)).                            %% Make a list of size NumOfEquations
 
-% second bddTree, recursive function
-tree_only(Map, [Head|Perm], Tree, BoolFunction) ->
-  %% The way Down of the tree
-  Right = tree_only(Map#{get_name(Tree):=true}, Perm, new_node(Head), BoolFunction),
-  Left =  tree_only(Map#{get_name(Tree):=false}, Perm, new_node(Head), BoolFunction),
-  %% On the way up from recursive call
-  if
-    true ->
-      {NumNodesR, NumLeavesR, HeightR} = get_data(Right),
-      {NumNodesL, NumLeavesL, HeightL} = get_data(Left),
-      update_node(Tree, Right, Left,
-        NumNodesR+NumNodesL+1, NumLeavesR+NumLeavesL, max(HeightR, HeightL)+1)
-  end;
 
-tree_only(Map, [], Tree, BoolFunction) ->
-  Right = get_leaf(Map, bool_func_calc(BoolFunction, Map#{get_name(Tree):=true})),
-  %newNode('leaf', calcFunc(Map#{getName(Tree):=1})), %%connect to one, zero nodes
-  Left =  get_leaf(Map, bool_func_calc(BoolFunction, Map#{get_name(Tree):=false})),
-  %newNode('leaf', calcFunc(Map#{getName(Tree):=0})),
-  if
-    true ->
-      {NumNodesR, NumLeavesR, HeightR} = get_data(Right),
-      {NumNodesL, NumLeavesL, HeightL} = get_data(Left),
-      update_node(Tree, {Right, Map#{get_name(Tree):=true}}, {Left, Map#{get_name(Tree):=false}},
-        NumNodesR+NumNodesL+1, NumLeavesR+NumLeavesL, max(HeightR, HeightL)+1)
-  end.
+boolean_gen(NumOfVars, MaxNum) -> case rand:uniform() of                            %% Take a random number
+                            Random when Random=<0.2 -> {'not',case NumOfVars of     %% Generate 'not'
+                                                                 1 -> list_to_atom(lists:flatten(io_lib:format("x~p", [NumOfVars])));
+                                                                 _ -> boolean_gen(NumOfVars, MaxNum)
+                                                               end};
+                            _ -> {case rand:uniform() of
+                                   Random2 when Random2=<0.5 -> 'and';              %% Generate 'or', 'and'
+                                   _ -> 'or'
+                                 end,case NumOfVars of
+                                         1 -> {list_to_atom(lists:flatten(io_lib:format("x~p", [rand:uniform(MaxNum)]))),
+                                           list_to_atom(lists:flatten(io_lib:format("x~p", [NumOfVars])))};
+                                         _ ->{list_to_atom(lists:flatten(io_lib:format("x~p", [NumOfVars]))),
+                                           boolean_gen(NumOfVars-1, MaxNum)}
+                                       end
+                            }
+                          end.
