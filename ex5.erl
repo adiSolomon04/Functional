@@ -1,39 +1,71 @@
 -module(ex5).
 
 %% API
--export([]).
+-export([ring_parallel/2, ring_serial/2]).
 
-ring_parallel(N,M) when is_number(N), is_number(M) andalso N>1, M>1 -> create_n_process(N,M, erlang:timestamp());
+%% creates processes and send the start message to pid1
+ring_parallel(N,M) when is_number(N), is_number(M) andalso N>1, M>0 ->
+	Start_time = erlang:timestamp(),
+	[Pid1| Pids] = create_process_parallel(N,M),
+	Pid1! {{[],[first,self()|Pids]++[Pid1]}, 1},
+	receive
+		{Time_process, Messages} ->
+			io:format("total time taken ~f seconds~n", [timer:now_diff(Time_process, Start_time) / 1000000]),
+			{timer:now_diff(Time_process, Start_time), Messages, Messages}
+	end;
 ring_parallel(_,_) -> input_error.
 
-create_n_process(N, M, Start_time) -> Last_pid = spawn(fun() -> process_parallel_func(N, N, M, 0, Start_time), 
-																		create_n_process(N-1, N, M, Last_pid, Start_Time).
+%% same as ring_parallel, difference is that all of the processes are the same.
+ring_serial(V,M) when is_number(V), is_number(M) andalso V>1, M>0 ->
+	Start_time = erlang:timestamp(),
+	[Pid1| Pids] = create_process_serial(V,M),
+	Pid1! {{[],[first,self()|Pids]++[Pid1]}, 1},
+receive
+{Time_process, Messages} ->
+io:format("total time taken ~f seconds~n", [timer:now_diff(Time_process, Start_time) / 1000000]),
+{timer:now_diff(Time_process, Start_time), Messages, Messages}
+end;
+ring_serial(_,_) -> input_error.
 
-create_n_process(1,N,M,Next_pid), Start_Time -> spawn(fun() -> process_parallel_func(1, N, M, Next_pid, Start_Time) end;
-%%create_n_process(N,N,F,_) -> [spawn(fun() -> F end];
-create_n_process(I,N,M,Next_pid, Start_Time) -> Id = spawn(fun() -> process_parallel_func(I, N, M, Next_pid, 0) end), 
-																							create_n_process(I-1,N,M,Id, Start_Time).
 
-process_parallel_func(Id, N, M, Next_pid, Start_time) -> 
-	case Id of 
-		1 -> receive
-					 Num -> case Num of 
-										M -> io:format("total time taken ~f seconds~n", [timer:now_diff(erlang:timestamp(), Start_time) / 1000000]);
-										_ -> Next_pid ! {Num+1,self()}, process_parallel_func(Id, N, M, Next_pid, Start_time)
-									end
-					end
-						 
-		N -> receive 
-					 {Num, First_pid} -> case Num of
-															 	M -> First_pid ! Num;
-																_ -> First_pid ! Num, process_parallel_func(Id, N, M, 0, 0)
-															 end
-				 end
-			
-		_ -> receive 
-					 {Num, First_pid} -> case Num of
-															 	M -> Next_pid ! {Num, First_pid};
-																_ -> Next_pid ! {Num,First_pid}, process_parallel_func(Id, N, M, Next_pid, 0)
-															 end
-				 end
-	end
+%% returns N pids of different processes
+create_process_parallel(N, M) -> lists:map(fun(_) -> spawn(fun() -> process_func(M)
+																													 end)
+																					 end, lists:seq(1, N)).
+
+%% returns a list of V equal pids
+create_process_serial(V,M) -> Pid1 = spawn(fun() -> process_func(M)end),
+	lists:map(fun(_) -> Pid1 end, lists:seq(1, V)).
+
+
+%% The process function.
+%% Each process sends message to the next process in the list.
+%% The first process configures the message, and send back data to the main process.
+process_func(M) ->
+	receive
+		{die} -> dead;
+		{{List,[Head|Tail]}, Message} -> 	case is_pid(Head) of
+																				true -> Head!{{List, Tail}, Message}, process_func(M);
+																				false -> [_,Pid2|Pids]=Tail, Pid2!{{Tail,Pids}, Message},
+																					process_func(M) %% first message to vertex 1.
+																			end;
+		{{List,[]}, M} -> [PidMain|Pids]=List, PidMain!{erlang:timestamp(),M},
+			Set = sets:from_list(Pids), send_die(sets:to_list(Set)); %%This line removes all duplicates.
+		{{List,[]}, Message} ->
+			[_,Pid2|Pids]=List, Pid2!{{List,Pids}, Message+1}, process_func(M)
+	end.
+
+send_die([Pid|Pids]) -> Pid!{die}, send_die(Pids--[Pid]);
+send_die([]) -> done.
+
+
+mesh_parallel(N, M, C) when is_number(N), is_number(M) andalso V>1, M>0 ->
+	Start_time = erlang:timestamp(),
+	[Pid1| Pids] = create_process_serial(V,M),
+	Pid1! {{[],[first,self()|Pids]++[Pid1]}, 1},
+	receive
+		{Time_process, Messages} ->
+			io:format("total time taken ~f seconds~n", [timer:now_diff(Time_process, Start_time) / 1000000]),
+			{timer:now_diff(Time_process, Start_time), Messages, Messages}
+	end;
+mesh_parallel(_,_,_) -> input_error.
