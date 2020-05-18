@@ -14,7 +14,8 @@ songList(Songs) -> G = digraph:new(),
                                               _ -> nothing
                                             end
                                         end, Songs)
-                end, Songs), G.
+                end, Songs),
+  io:format("number of edges: ~p~n", [digraph:no_edges(G)]),G.
 
 songGen(G, Start, End) -> VerS = digraph:vertex(G,Start), VerE = digraph:vertex(G,End),
                           if
