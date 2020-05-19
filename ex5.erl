@@ -59,7 +59,7 @@ send_die([Pid|Pids]) -> Pid!{die}, send_die(Pids--[Pid]);
 send_die([]) -> done.
 
 
-mesh_parallel(N, M, C) when is_number(N), is_number(M) andalso V>1, M>0 ->
+mesh_parallel(N, M, C) when is_number(N), is_number(M), is_number(C) andalso C=<N*N, M>0 ->
 	Start_time = erlang:timestamp(),
 	[Pid1| Pids] = create_process_serial(V,M),
 	Pid1! {{[],[first,self()|Pids]++[Pid1]}, 1},
@@ -69,3 +69,5 @@ mesh_parallel(N, M, C) when is_number(N), is_number(M) andalso V>1, M>0 ->
 			{timer:now_diff(Time_process, Start_time), Messages, Messages}
 	end;
 mesh_parallel(_,_,_) -> input_error.
+
+register_process(N) ->
