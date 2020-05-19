@@ -59,7 +59,7 @@ send_die([Pid|Pids]) -> Pid!{die}, send_die(Pids--[Pid]);
 send_die([]) -> done.
 
 
-mesh_parallel(N, M, C) when is_number(N), is_number(M), is_number(C) andalso C=<N*N, M>0 ->
+mesh_parallel(N, M, C) when is_number(N), is_number(M), is_number(C) andalso  M>0, N>1, C=<N*N ->
 	Start_time = erlang:timestamp(),
 	[Pid1| Pids] = create_process_serial(V,M),
 	Pid1! {{[],[first,self()|Pids]++[Pid1]}, 1},
@@ -70,4 +70,24 @@ mesh_parallel(N, M, C) when is_number(N), is_number(M), is_number(C) andalso C=<
 	end;
 mesh_parallel(_,_,_) -> input_error.
 
-register_process(N) ->
+register_process(N) -> lists:foreach(fun(X) ->register(X, spawn(?MODULE, mesh_parallel_process,[N,#{}]) end,lists:seq(1, N*N)).
+
+mesh_parallel_process(N,Map) -> receive
+																	{Me,{Type,{To,C,MessageNum}=Data}=Message} -> case find(Message,Map) of
+																																				 			{ok,_} -> mesh_parallel_process(Map);
+																																				 			error -> case Me of
+																																												To -> send_to_neighbors(Me,N, {r,Data}=Response),
+																																													mesh_parallel_process(
+																																														Map#{Message=>1,Response=>1});
+																																												C when Type==r -> 
+																																													mesh_parallel_process(N,maps:update(c, mps:get(c,M), M);
+																																												_ -> send_to_neighbors(Me,N, Message),
+																																													 mesh_parallel_process(Map#{Message=>1})
+																																											end								
+																																							end; 
+																	{C,M, start} -> receive_messages(C,N,M), mesh_parallel_process(N,#{c=>0})
+																	end.
+
+send_messages(C,N,M) -> lists:foreach(fun(X) ->lists:foreach(fun(Num) -> send_to_neighbors(C, N, {m,{X,Num}}) 
+																														 end, lists:seq(1, M))
+																		end,lists:seq(1, N*N)).
