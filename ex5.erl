@@ -175,36 +175,31 @@ mesh_serial(_,_,_) -> input_error.
 
 mesh_serial_process(N,Map) ->
 	receive
-		die -> dead
+		{Me,{Type,{To,C,_}=Data}=Message}=Print -> io:format("~p print 1~n",[Print]),
+			{ok, MeMap} = maps:find(Me,Map), %%diff
+			case maps:find(Message, MeMap) of %%diff
+				{ok,_} -> mesh_serial_process(N,Map);
+				error -> io:format("~p print 2~n",[Print]),
+					case Me of
+						To -> send_to_neighbors_serial(Me,N,Response={r,Data}),
+							NewMeMap= MeMap#{Message=>1,Response=>1},
+							mesh_serial_process(N,Map#{Me=>NewMeMap}); %%diff
+						C when Type==r ->
+							case maps:get(m,Map)*(N*N-1)-(maps:get(c,Map)+1) of %%M*(N*N-1) is total number of messages that C need to receive
+								Num when Num>0 -> MapUpdate = maps:update(c, maps:get(c,Map)+1, Map), NewMeMap = MeMap#{Message=>1},%%diff
+									io:format("~p print 3~n",[Print]),
+									mesh_serial_process(N,MapUpdate#{Me => NewMeMap}); %%diff
+								_ -> Pid = maps:get(pid,Map), Pid!{erlang:timestamp(), maps:get(c,Map)+1, maps:get(sent,Map)} %%die
+							end;
+						C when Type==m -> NewMeMap = MeMap#{Message=>1}, mesh_serial_process(N,Map#{Me=>NewMeMap});
+						_ -> send_to_neighbors_serial(Me,N,Message),
+							mesh_serial_process(N,Map#{Message=>1})
+					end
+			end;
+		{C,M,Pid,start}=Print -> Num_neighbors = send_messages_serial(C,N,M), NewMap=create_map_process(N),io:format("~p print in c~n",[Print]),
+			mesh_serial_process(N,NewMap#{c=>0, pid=>Pid, m=>M, sent=>Num_neighbors*(N*N-1)})
 	after
-		0 ->
-			receive
-				{Me,{Type,{To,C,_}=Data}=Message}=Print -> io:format("~p print 1~n",[Print]),
-					{ok, MeMap} = maps:find(Me,Map), %%diff
-					case maps:find(Message, MeMap) of %%diff
-						{ok,_} -> mesh_serial_process(N,Map);
-						error -> io:format("~p print 2~n",[Print]),
-							case Me of
-								To -> send_to_neighbors_serial(Me,N,Response={r,Data}),
-									NewMeMap= MeMap#{Message=>1,Response=>1},
-									mesh_serial_process(N,Map#{Me=>NewMeMap}); %%diff
-								C when Type==r ->
-									case maps:get(m,Map)*(N*N-1)-(maps:get(c,Map)+1) of %%M*(N*N-1) is total number of messages that C need to receive
-										Num when Num>0 -> MapUpdate = maps:update(c, maps:get(c,Map)+1, Map), NewMeMap = MeMap#{Message=>1},%%diff
-											io:format("~p print 3~n",[Print]),
-											mesh_serial_process(N,MapUpdate#{Me => NewMeMap}); %%diff
-										_ -> Pid = maps:get(pid,Map), Pid!{erlang:timestamp(), maps:get(c,Map)+1, maps:get(sent,Map)}, self()!die
-									end;
-								C when Type==m -> NewMeMap = MeMap#{Message=>1}, mesh_serial_process(N,Map#{Me=>NewMeMap});
-								_ -> send_to_neighbors(Me,N,Message),
-									mesh_serial_process(N,Map#{Message=>1})
-							end
-					end;
-				{C,M,Pid,start}=Print -> Num_neighbors = send_messages_serial(C,N,M), NewMap=create_map_process(N),io:format("~p print in c~n",[Print]),
-					mesh_serial_process(N,NewMap#{c=>0, pid=>Pid, m=>M, sent=>Num_neighbors*(N*N-1)})
-			after
-				0 -> mesh_serial_process(N,Map)
-			end
+		0 -> mesh_serial_process(N,Map)
 	end.
 
 %% Create a map where each 'node' has a new map
