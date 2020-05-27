@@ -1,0 +1,171 @@
+--ring
+(4,10)
+{188,10,10} parallel
+{62,10,10} serial
+
+(4,100)
+{268,100,100}
+{285,100,100}
+
+(4,10000)
+{33461,10000,10000}
+{36786,10000,10000}
+
+(8,10)
+{436,10,10}
+{38,10,10}
+
+(8,100)
+{2271,100,100}
+{495,100,100}
+
+(16,10)
+{896,10,10}
+{106,10,10}
+
+(16,100)
+{5855,100,100}
+{804,100,100}
+
+(16,1000)
+{39221,1000,1000}
+{5206,1000,1000}
+
+------------------------------
+--mesh parallel
+1> ex5:mesh_parallel(2,10,1).
+total time taken 0.003764 seconds
+{3764,20,30}
+2> ex5:mesh_parallel(2,100,1).
+total time taken 0.009513 seconds
+{9513,200,300}
+3> ex5:mesh_parallel(2,1000,1).
+total time taken 0.037281 seconds
+{37281,2000,3000}
+4> ex5:mesh_parallel(3,10,1).
+total time taken 0.005529 seconds
+{5529,20,80}
+5> ex5:mesh_parallel(3,10,5).
+total time taken 0.004948 seconds
+{4948,40,80}
+6> ex5:mesh_parallel(3,100,1).
+total time taken 0.023639 seconds
+{23639,200,800}
+7> ex5:mesh_parallel(3,100,5).
+total time taken 0.019818 seconds
+{19818,400,800}
+8> ex5:mesh_parallel(3,1000,1).
+total time taken 0.263808 seconds
+{263808,2000,8000}
+9> ex5:mesh_parallel(3,1000,5).
+total time taken 0.212269 seconds
+{212269,4000,8000}
+10> ex5:mesh_parallel(4,10,1).
+total time taken 0.010650 seconds
+{10650,20,150}
+11> ex5:mesh_parallel(4,10,7).
+total time taken 0.011138 seconds
+{11138,40,150}
+12> ex5:mesh_parallel(4,100,1).
+total time taken 0.085386 seconds
+{85386,200,1500}
+13> ex5:mesh_parallel(4,100,7).
+total time taken 0.073046 seconds
+{73046,400,1500}
+14> ex5:mesh_parallel(4,1000,1).
+total time taken 1.021004 seconds
+{1021004,2000,15000}
+15> ex5:mesh_parallel(4,1000,7).
+total time taken 0.778866 seconds
+{778866,4000,15000}
+16> ex5:mesh_parallel(5,10,1).
+total time taken 0.023434 seconds
+{23434,20,240}
+17> ex5:mesh_parallel(5,10,13).
+total time taken 0.019898 seconds
+{19898,40,240}
+18> ex5:mesh_parallel(5,100,1).
+total time taken 0.211732 seconds
+{211732,200,2400}
+19> ex5:mesh_parallel(5,100,13).
+total time taken 0.156622 seconds
+{156622,400,2400}
+20> ex5:mesh_parallel(5,1000,1).
+total time taken 2.858455 seconds
+{2858455,2000,24000}
+21> ex5:mesh_parallel(5,1000,13).
+total time taken 1.999374 seconds
+{1999374,4000,24000}
+
+--------------------------------------
+-- mesh serial
+1> ex5:mesh_serial(2,10,1).
+total time taken 0.000282 seconds
+{282,200,30}
+2> ex5:mesh_serial(2,100,1).
+total time taken 0.004810 seconds
+{4810,20000,300}
+3> ex5:mesh_serial(2,1000,1).
+total time taken 0.031998 seconds
+{31998,2000000,3000}
+4> ex5:mesh_serial(3,10,1).
+total time taken 0.003846 seconds
+{3846,200,80}
+5> ex5:mesh_serial(3,10,5).
+total time taken 0.002737 seconds
+{2737,400,80}
+6> ex5:mesh_serial(3,100,1).
+total time taken 0.023690 seconds
+{23690,20000,800}
+7> ex5:mesh_serial(3,100,5).
+total time taken 0.031020 seconds
+{31020,40000,800}
+8> ex5:mesh_serial(3,1000,1).
+total time taken 0.313488 seconds
+{313488,2000000,8000}
+9> ex5:mesh_serial(3,1000,5).
+total time taken 0.195271 seconds
+{195271,4000000,8000}
+10> ex5:mesh_serial(4,10,1).
+total time taken 0.008498 seconds
+{8498,200,150}
+11> ex5:mesh_serial(4,10,7).
+total time taken 0.005929 seconds
+{5929,400,150}
+12> ex5:mesh_serial(4,100,1).
+total time taken 0.094329 seconds
+{94329,20000,1500}
+13> ex5:mesh_serial(4,100,7).
+total time taken 0.068378 seconds
+{68378,40000,1500}
+14> ex5:mesh_serial(4,1000,1).
+total time taken 1.121778 seconds
+{1121778,2000000,15000}
+15> ex5:mesh_serial(4,1000,7).
+total time taken 1.073784 seconds
+{1073784,4000000,15000}
+16> ex5:mesh_serial(5,10,1).
+total time taken 0.019992 seconds
+{19992,200,240}
+17> ex5:mesh_serial(5,10,13).
+total time taken 0.016405 seconds
+{16405,400,240}
+18> ex5:mesh_serial(5,100,1).
+total time taken 0.198356 seconds
+{198356,20000,2400}
+19> ex5:mesh_serial(5,100,13).
+total time taken 0.176636 seconds
+{176636,40000,2400}
+20> ex5:mesh_serial(5,1000,1).
+total time taken 3.217882 seconds
+{3217882,2000000,24000}
+21> ex5:mesh_serial(5,1000,13).
+total time taken 2.817641 seconds
+{2817641,4000000,24000}
+
+
+
+
+
+
+

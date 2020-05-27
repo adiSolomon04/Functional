@@ -230,7 +230,7 @@ num_to_atom(X) -> list_to_atom(lists:flatten(io_lib:format("~p", [X]))).
 %%-----------------MESH Serial----------------------------
 mesh_serial(N, M, C) when is_number(N), is_number(M), is_number(C) andalso  M>0, N>1, C=<N*N ->
 	Start_time = erlang:timestamp(),
-	Pid =spawn(fun() -> mesh_serial_process(N) end),
+	Pid = spawn(fun() -> mesh_serial_process(N) end),
 	%%registered(),
 	Pid!{C,M,self(),start},
 	receive
@@ -242,7 +242,8 @@ mesh_serial(_,_,_) -> input_error.
 
 mesh_serial_process(N) -> %% starting message {Me,{all, C, M}} response is {Me, {From, C,M}}
 	receive
-		{Me,{From,C,_}=Message} when is_number(From) ->
+		{Me,{From,C,_}=Message}=Print when is_number(From) ->
+			%io:format("~p1~n ",[Print]),
 			MeMap = get(Me), %%diff
 			case maps:find(Message, MeMap) of %%diff
 				{ok,_} -> mesh_serial_process(N);
@@ -265,18 +266,21 @@ mesh_serial_process(N) -> %% starting message {Me,{all, C, M}} response is {Me, 
 							mesh_serial_process(N)
 					end
 			end;
-		{Me, {all,C,Num}=Message} ->
+		{Me, {all,C,Num}=Message}=Print ->
+			%io:format("~p2~n ",[Print]),
 			MeMap = get(Me), %%diff
 			case maps:find(Message, MeMap) of %%diff
 				{ok,_} -> mesh_serial_process(N);
 				error -> send_to_neighbors_serial(Me,N,Response={Me,C,Num}),
-					send_to_neighbors(Me,N,Message),
+					send_to_neighbors_serial(Me,N,Message),
 					NewMeMap = MeMap#{Message=>1, Response =>1},
 					put(Me, NewMeMap),
+					%io:format("~pall1~n ",[Print]),
 					mesh_serial_process(N)
 			end;
-		{C,M,Pid,start} -> Num_neighbors = send_messages_serial(C,N,M), create_map_process(N), NewMap=create_map_messages_serial(C,N),
-			put(c, 0), put(pid, Pid), put(m, M), put(sent, Num_neighbors*M*(N*N-1)), put(C, NewMap),
+		{C,M,Pid,start} ->
+			Num_neighbors = send_messages_serial(C,N,M), create_map_process(N), NewMap=create_map_messages_serial(C,M),
+			put(c, 0), put(pid, Pid), put(m, M), put(sent, Num_neighbors*M), put(C, NewMap),
 			mesh_serial_process(N)
 	end.
 
