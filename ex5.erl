@@ -4,7 +4,6 @@
 -export([ring_parallel/2, ring_serial/2]).
 -export([mesh_serial/3, mesh_parallel/3]).
 
--compile(export_all).
 %%-------------------------RING-------------------------------
 %% creates processes and send the start message to pid1
 ring_parallel(N,M) when is_number(N), is_number(M) andalso N>1, M>0 ->
@@ -66,6 +65,8 @@ send_die([]) -> done.
 %% --------------------MESH---------------------------
 %% --------------------MESH Parallel---------------------------
 
+% parallel function - creates a mesh of N*N proceeses, then sends a start message to the C process.
+% recieves the information back, prints and returns it.
 mesh_parallel(N, M, C) when is_number(N), is_number(M), is_number(C) andalso  M>0, N>1, C=<N*N ->
 	Start_time = erlang:timestamp(),
 	create_register_process(N),
@@ -80,25 +81,27 @@ mesh_parallel(N, M, C) when is_number(N), is_number(M), is_number(C) andalso  M>
 	end;
 mesh_parallel(_,_,_) -> input_error.
 
-create_register_process(N) -> lists:foreach(fun(X) -> register(num_to_atom(X), spawn(fun()->mesh_parallel_process2(N)
+%% creates the processes and
+%% registers them to the system
+%% each one is registers to number between 1 to N*N
+create_register_process(N) -> lists:foreach(fun(X) -> register(num_to_atom(X), spawn(fun()->mesh_parallel_process(N)
 																																							end))
 																		 end,lists:seq(1, N*N)).
 
-create_register_process2(N) -> lists:foreach(fun(X) -> register(num_to_atom(X), spawn(fun()->echo()%%mesh_parallel_process2(N)
-																																										 end))
-																						end,lists:seq(1, N*N)--[5]),
-	register(num_to_atom(5), spawn(fun()->mesh_parallel_process2(N)
-																 end)).
-
+% used in the end of the function
+% in order to kill all of the processes
 kill_all_mesh(N) -> lists:foreach(fun(X)-> case whereis(num_to_atom(X)) of
 																						 undefined -> 0; %%only on C
 																						 Pid -> exit(Pid, endofProg)
 																					 end
 																	end, lists:seq(1, N*N)).
 
+%% The processes function
+%% receiving messages and sending the next one to all of theyre neighbors
+%% when receiving the 'all' message they also send a response message
+%% The C process will count the response messages it receives
 
-
-mesh_parallel_process2(N) ->
+mesh_parallel_process(N) ->
 	receive
 		{Me,{From,C,_}=Message} when is_number(From)->
 			 %% starting message {Me,{all, C, M}} response is {Me, {From, C,M}}
@@ -110,7 +113,7 @@ mesh_parallel_process2(N) ->
 							case get(m)*(N*N-1)-(get(c)+1) of %%M*(N*N-1) is total number of messages that C need to receive
 								Diff when Diff>0 -> put(c, get(c)+1),
 									put(Message, 1),
-									mesh_parallel_process2(N);
+									mesh_parallel_process(N);
 								_ -> %send_die_mesh(N),
 									%io:format("print c2 ~p, num~p~n", [get(c)+1, Diff]),
 									Pid = get(pid), Pid!{erlang:timestamp(), get(c)+1, get(sent)}
@@ -118,9 +121,9 @@ mesh_parallel_process2(N) ->
 						%%C when Type==m -> mesh_parallel_process(N,Map#{Message=>1});
 						_ -> send_to_neighbors(Me,N,Message),
 							put(Message, 1),
-							mesh_parallel_process2(N)
+							mesh_parallel_process(N)
 					end;
-				_ ->mesh_parallel_process2(N)
+				_ ->mesh_parallel_process(N)
 			end;
 		{Me, {all,C,Num}=Message} -> %%receive a starting message - send to neghibors and send response
 			%io:format("print 1 ~p~n", [Print]),
@@ -129,67 +132,32 @@ mesh_parallel_process2(N) ->
 					send_to_neighbors(Me,N,Message),
 					put(Message, 1),
 					put(Response, 1),
-					mesh_parallel_process2(N);
-				_ -> mesh_parallel_process2(N)
+					mesh_parallel_process(N);
+				_ -> mesh_parallel_process(N)
 			end;
 
-		{C,M,Pid,start} -> Num_sent = send_messages2(C,N,M), create_map_messages2(C, M),
+		{C,M,Pid,start} -> Num_sent = send_messages(C,N,M), create_map_messages(C, M),
 			put(c, 0), put(pid, Pid), put(m, M), put(sent, Num_sent),
-			mesh_parallel_process2(N)%%get_num_neighbors(C,N,1,0)*M*(N-1)})
+			mesh_parallel_process(N)
 	end.
 
-create_map_messages2(C ,M) -> lists:map(fun(X) -> put({all,C,X}, 1)
+%%---------------End of mesh_parallel_process------------------------
+
+%% sends the start message to all of C's neighbors.
+%% The message is {NodeNum,{all,C,Num}}
+send_messages(C,N,M) -> lists:sum(lists:map(fun(Num) -> send_to_neighbors(C, N,{all,C,Num})
+																					 end, lists:seq(1, M))).
+
+%% adds the sent messages to C's dictionary.
+%% The next time it receives those messages - ignores
+create_map_messages(C ,M) -> lists:map(fun(X) -> put({all,C,X}, 1)
 																											end, lists:seq(1, M)).
 
-send_messages2(C,N,M) -> lists:sum(lists:map(fun(Num) -> send_to_neighbors(C, N,{all,C,Num})
-																						end, lists:seq(1, M))).
 
-echo() ->
-	receive
-		Message -> io:format("in process ~p~n", [Message]), echo()
-	end.
-
-mesh_parallel_process(N,Map) ->
-		receive
-			{Me,{To,C,Num}=Message} -> %% starting message {Me,{all, C, M}} response is {Me, {From, C,M}}
-				case maps:find(Message,Map) of
-					{ok,_} -> mesh_parallel_process(N,Map);
-					error ->
-						case Me of
-							%%To -> send_to_neighbors(Me,N,Response={r,Data}),
-							%%	mesh_parallel_process(N,
-							%%		Map#{Message=>1,Response=>1});
-							C -> %this is an r message
-								case maps:get(m,Map)*(N*N-1)-(maps:get(c,Map)+1) of %%M*(N*N-1) is total number of messages that C need to receive
-									Num when Num>0 -> MapUpdate = maps:update(c, maps:get(c,Map)+1, Map),
-										mesh_parallel_process(N,MapUpdate#{Message=>1});
-									_ -> %send_die_mesh(N),
-										Pid = maps:get(pid,Map), Pid!{erlang:timestamp(), maps:get(c,Map)+1, maps:get(sent,Map)}
-								end;
-							%%C when Type==m -> mesh_parallel_process(N,Map#{Message=>1});
-							_ -> send_to_neighbors(Me,N,Message),
-								case To of %%update maps and send response if needed
-									X when is_number(X) ->mesh_parallel_process(N,Map#{Message=>1});
-									all -> send_to_neighbors(Me,N,Response={Me,C,Num}),mesh_parallel_process(N,Map#{Message=>1, Response=>1})  %%also send a response
-								  %%_ -> nothing %%dont reach it
-								end
-						end
-				end;
-			{C,M,Pid,start} -> Num_sent = send_messages(C,N,M), Map =create_map_messages(C, M),
-				mesh_parallel_process(N,Map#{c=>0, pid=>Pid, m=>M, sent=>Num_sent})%%get_num_neighbors(C,N,1,0)*M*(N-1)})
-		end.
-
-send_messages(C,N,M) -> lists:sum(lists:map(fun(Num) -> send_to_neighbors(C, N,{all,C,Num})
-																						end, lists:seq(1, M))).
-
-create_map_messages(C ,M) -> maps:from_list(lists:map(fun(X) -> {{m,{all,C,X}}, 1}
-																			 end, lists:seq(1, M))).
-
-
-%% sending messages functions.
+%% sending messages functions. The computation is according to N and Me.
+%% sends in a direction if it is in the limits of mesh.
 send_to_neighbors(Me, N, Message) ->
 	send_up(Me, N, Message)+send_down(Me, N, Message)+send_right(Me, N, Message)+send_left(Me, N, Message).
-%%send_to_neighbors(_,_,_) -> dont_send.
 
 send_up(Me, N, Message) when Me>N -> SendTo = Me-N, case whereis(num_to_atom(SendTo)) of
 																											undefined -> 0;
@@ -219,19 +187,14 @@ send_left(_,_,_) -> 0.
 get_num_neighbors([Head|_]) -> Head.
 %% Same as send_to_neighbors - counts the number of neighbors
 
-%send_die_mesh(N) -> lists:foreach(fun(X)-> whereis(num_to_atom(X))!die end, lists:seq(1,N*N)).
-
-
 %%----------------End MESH parallel
 
-num_to_atom(X) -> list_to_atom(lists:flatten(io_lib:format("~p", [X]))).
-
-
 %%-----------------MESH Serial----------------------------
+
+
 mesh_serial(N, M, C) when is_number(N), is_number(M), is_number(C) andalso  M>0, N>1, C=<N*N ->
 	Start_time = erlang:timestamp(),
 	Pid = spawn(fun() -> mesh_serial_process(N) end),
-	%%registered(),
 	Pid!{C,M,self(),start},
 	receive
 		{Time_process, Messages, Sent} ->
@@ -240,42 +203,40 @@ mesh_serial(N, M, C) when is_number(N), is_number(M), is_number(C) andalso  M>0,
 	end;
 mesh_serial(_,_,_) -> input_error.
 
+
+%% Same as in parallel.
+%% Difference is that it uses map for each node.
+%% The maps are in the dictionary
+
 mesh_serial_process(N) -> %% starting message {Me,{all, C, M}} response is {Me, {From, C,M}}
 	receive
-		{Me,{From,C,_}=Message}=Print when is_number(From) ->
-			%io:format("~p1~n ",[Print]),
-			MeMap = get(Me), %%diff
-			case maps:find(Message, MeMap) of %%diff
+		{Me,{From,C,_}=Message} when is_number(From) ->
+			MeMap = get(Me),
+			case maps:find(Message, MeMap) of
 				{ok,_} -> mesh_serial_process(N);
 				error ->
 					case Me of
-						%%To -> send_to_neighbors_serial(Me,N,Response={r,Data}),
-						%	NewMeMap= MeMap#{Message=>1,Response=>1},
-						%	mesh_serial_process(N,Map#{Me=>NewMeMap}); %%diff
 						C ->
 							case get(m)*(N*N-1)-(get(c)+1) of %%M*(N*N-1) is total number of messages that C need to receive
-								Diff when Diff>0 -> put(c, get(c)+1), NewMeMap = MeMap#{Message=>1},%%diff
+								Diff when Diff>0 -> put(c, get(c)+1), NewMeMap = MeMap#{Message=>1},
 									put(Me, NewMeMap),
 									mesh_serial_process(N); %%diff
 								_ -> Pid = get(pid), Pid!{erlang:timestamp(), get(c)+1, get(sent)} %%die
 							end;
-						%%C when Type==m -> NewMeMap = MeMap#{Message=>1}, mesh_serial_process(N,Map#{Me=>NewMeMap});
 						_ -> send_to_neighbors_serial(Me,N,Message),
 							NewMeMap = MeMap#{Message=>1},
 							put(Me, NewMeMap),
 							mesh_serial_process(N)
 					end
 			end;
-		{Me, {all,C,Num}=Message}=Print ->
-			%io:format("~p2~n ",[Print]),
-			MeMap = get(Me), %%diff
-			case maps:find(Message, MeMap) of %%diff
+		{Me, {all,C,Num}=Message} ->
+			MeMap = get(Me),
+			case maps:find(Message, MeMap) of
 				{ok,_} -> mesh_serial_process(N);
 				error -> send_to_neighbors_serial(Me,N,Response={Me,C,Num}),
 					send_to_neighbors_serial(Me,N,Message),
 					NewMeMap = MeMap#{Message=>1, Response =>1},
 					put(Me, NewMeMap),
-					%io:format("~pall1~n ",[Print]),
 					mesh_serial_process(N)
 			end;
 		{C,M,Pid,start} ->
@@ -284,17 +245,22 @@ mesh_serial_process(N) -> %% starting message {Me,{all, C, M}} response is {Me, 
 			mesh_serial_process(N)
 	end.
 
-
-create_map_messages_serial(C ,M) -> maps:from_list(lists:map(fun(X) -> {{all,C,X}, 1}
-																				end, lists:seq(1, M))).
-
 %% Create a map where each 'node' has a new map
 create_map_process(N)-> lists:foreach(fun(X)-> put(X,#{}) end,lists:seq(1, N*N)).
 
+%% creates a map of messages that contains
+%% all of the sent messages (the m type - {all,C,Num})
+create_map_messages_serial(C ,M) -> maps:from_list(lists:map(fun(X) -> {{all,C,X}, 1}
+																				end, lists:seq(1, M))).
+
+%% Sends the first messages to all of the neighbors of C.
+%% (same as i parallel, the difference is in  send_to_neighbors_serial)
 send_messages_serial(C,N,M) -> lists:sum(lists:map(fun(Num) -> send_to_neighbors_serial(C, N,{all,C,Num})%%diff
 																																								 end, lists:seq(1, M))).
 
 %% sending messages functions.
+%% The difference from the parallel function is that
+%% every message is sent to the same node using sent()
 send_to_neighbors_serial(Me, N, Message) ->
 	send_up_serial(Me, N, Message)+send_down_serial(Me, N, Message)+send_right_serial(Me, N, Message)+send_left_serial(Me, N, Message).
 %%send_to_neighbors(_,_,_) -> dont_send.
@@ -311,3 +277,8 @@ send_right_serial(_,_,_) -> 0.
 send_left_serial(Me, N, Message) when Me rem N>1;Me rem N==0 -> SendTo = Me-1, self()!{SendTo,Message}, 1;
 send_left_serial(_,_,_) -> 0.
 
+
+%-------------------Global func (both serial and parallle mesh)-------
+%% A function used to convert Numbers into Atoms.
+%% So we can get Pids by using the whereis() function.
+num_to_atom(X) -> list_to_atom(lists:flatten(io_lib:format("~p", [X]))).
